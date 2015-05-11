@@ -1,0 +1,102 @@
+@RestResource(urlMapping='/BTService/*')
+global with sharing class BTService {
+	
+  
+    @HttpGet
+    global static List<Account> doGet() {
+        RestRequest req = RestContext.request;
+        RestResponse res = RestContext.response;
+        System.debug('BT Service GET Call');
+		List<Account> results = new List<Account>();
+        String accountId = req.requestURI.substring(req.requestURI.lastIndexOf('/')+1);
+        System.debug('BTService GET - Account ID: ' + accountId);
+        if(!String.isBlank(accountId)){
+        				
+        	results = [Select a.Id,a.Name, a.Braintree_ID__c From Account a WHERE a.Id = :accountId];	
+        }else{
+        	results = [Select a.Id,a.Name, a.Braintree_ID__c From Account a  where a.Braintree_ID__c <> null limit 100];
+        }
+
+       
+        return results;
+    }
+  
+  @HttpPost
+    global static String doPost(String name, String btId) {
+        System.debug('BT Service POST Call');
+        Id accId;
+        Account accMatchedByBTId = findAccountByBTId(btId);
+        String accountIdResult;
+        
+        if(accMatchedByBTId!=null){// If an Account exists, store the Account Id
+        	
+        	accId = accMatchedByBTId.Id;
+        	System.debug('BT Service POST - Found a match by Id: ' + accId);
+        	Account parentAcc = findPossibleParentAccByName(name, btId);// Issue another query to find a possible parent Account
+        	System.debug('BT Service POST - Found a Parent Account Id: ' + accMatchedByBTId.ParentId);
+        	if(parentAcc!=null){
+        		if(accMatchedByBTId.ParentId != null){// This should not happen - would be an error condition
+        			System.debug('BT Service POST - Account Matched by Id Has existing Parent, reparenting');
+        		}
+        		accMatchedByBTId.ParentId = parentAcc.Id;// Update the Account found in 5. with a "Parent Account" using account found in 6.
+        		update accMatchedByBTId;
+        		accountIdResult = accId;
+        	}
+        }else{// If an Account does not exist by Braintree ID
+        	
+        	Account accMatchedByName = findAccountByBTName(name);// Query for an existing Account by Name
+        	
+        	if(accMatchedByName==null){// If no match, ceate an Account with that name
+        		
+        		Account newAcc = new Account();
+        		newAcc.Name=name;
+        		newAcc.Braintree_ID__c = btId;
+        		insert newAcc;
+        		System.debug('BT Service POST - Did not Find a match by Name, created a new Account: ' + newAcc.Id);
+        		accountIdResult = newAcc.Id;
+        	}else{//If there is a match, create a new Account with that name and assign the matching Account as the Parent Account
+        		System.debug('BT Service POST - Found a match by Name: ' + accMatchedByName.Id);
+        		Account newChildAcc = new Account();
+        		newChildAcc.Name=name;
+        		newChildAcc.Braintree_ID__c = btId;
+				newChildAcc.parentId = accMatchedByName.Id;
+        		insert newChildAcc;
+        		System.debug('BT Service POST - created a new account, and set account matched by name as parent: ' + newChildAcc.Id);
+        		accountIdResult = newChildAcc.Id;
+        	}
+        	
+        }
+        System.debug('BT Service POST - returning Account Id: ' + accountIdResult);
+        return accountIdResult;
+    }
+    
+    public static Account findAccountByBTId(String btId){
+    	
+    	
+    	List<Account> accList = [Select a.Id, a.Braintree_ID__c,a.ParentId From Account a where a.Braintree_ID__c =: btId];
+    	
+    	if (accList==null || accList.size()==0){
+    		return null;
+    	}
+    	return accList[0];
+    }
+    
+    public static Account findAccountByBTName(String accName){
+    	    	
+    	List<Account> accList = [Select a.Id, a.Braintree_ID__c, a.ParentId From Account a where a.Name =: accName];
+    	if (accList==null || accList.size()==0){
+    		return null;
+    	}
+    	return accList[0];
+    }
+    
+    public static Account findPossibleParentAccByName(String Name, String btId){
+    	 
+    	List<Account> accList = [Select a.Id, a.Braintree_ID__c, a.ParentId From Account a where a.Name =: name AND a.Braintree_ID__c !=: btId AND a.ParentId = null limit 1];
+    	if (accList==null || accList.size()==0){
+    		return null;
+    	}
+    	return accList[0];
+    }
+
+}
