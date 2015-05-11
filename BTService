@@ -12,9 +12,9 @@ global with sharing class BTService {
         System.debug('BTService GET - Account ID: ' + accountId);
         if(!String.isBlank(accountId)){
         				
-        	results = [Select a.Id,a.Name, a.Braintree_ID__c From Account a WHERE a.Id = :accountId];	
+        	results = [Select a.Id,a.Name, a.Braintree_ID__c, a.ParentId From Account a WHERE a.Id = :accountId];	
         }else{
-        	results = [Select a.Id,a.Name, a.Braintree_ID__c From Account a  where a.Braintree_ID__c <> null limit 100];
+        	results = [Select a.Id,a.Name, a.Braintree_ID__c, a.ParentId From Account a  where a.Braintree_ID__c <> null limit 100];
         }
 
        
